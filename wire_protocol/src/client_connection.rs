@@ -84,6 +84,7 @@ impl ClientConnectionReadHalf {
 impl ClientConnectionWriteHalf {
     pub async fn write(&mut self, request: &Requests) -> Result<(), ClientConnectionError> {
         let payload = request.write_fields().context(EncodeCommand {})?;
+        println!("{:X?}", payload);
         self.write_half.send_async(&payload).await.context(Write {})
     }
 
