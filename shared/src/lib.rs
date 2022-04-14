@@ -647,6 +647,7 @@ impl StreamSegments {
         assert!(prefix.is_empty());
         assert!(suffix.is_empty());
 
+        println!("length {}", buffer_u8.len());
         let (upper, _lower) = murmurhash3_x64_128(buffer_u8, StreamSegments::SEED);
         println!("upper {}, lower {}", upper, _lower);
         // takes the first 64 bit as Java client uses asLong method.
