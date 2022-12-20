@@ -38,7 +38,7 @@ members = [
     "macros",
     "pravegactl",
     "nodejs",
-    "cc"
+    "c"
 ]
 
 [dependencies]

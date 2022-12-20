@@ -1,5 +1,5 @@
 [package]
-name = "pravega_client_c"
+name = "pravega-client-c"
 version = "0.3.2"
 edition = "2018"
 categories = ["network-programming"]
@@ -28,5 +28,5 @@ tokio = { version = "1", features = ["full"] }
 cbindgen = "0.23.0"
 
 [lib]
-name = "pravega_client_c"
+name = "pravega_client"
 crate-type = ["cdylib"]
