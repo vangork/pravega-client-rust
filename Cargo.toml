@@ -39,7 +39,7 @@ members = [
     "pravegactl",
     "nodejs",
     "golang"
-    "cc"
+    "c"
 ]
 
 [dependencies]

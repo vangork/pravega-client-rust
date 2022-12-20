@@ -96,7 +96,7 @@ impl StreamWriter {
 #[no_mangle]
 pub unsafe extern "C" fn stream_writer_write_event(
     writer: *mut StreamWriter,
-    ptr: *mut u8,
+    ptr: *const u8,
     len: usize,
     routing_key: *const c_char,
 ) -> isize {
@@ -131,10 +131,17 @@ pub unsafe extern "C" fn stream_writer_write_event(
 pub unsafe extern "C" fn stream_writer_flush(writer: *mut StreamWriter) -> bool {
     let stream_writer = &mut *writer;
 
-    if catch_unwind(AssertUnwindSafe(move || stream_writer.flush())).is_err() {
-        false
-    } else {
-        true
+    match catch_unwind(AssertUnwindSafe(move || stream_writer.flush())) {
+        Ok(result) => {
+            if let Ok(val) = result {
+                true
+            } else {
+                false
+            }
+        }
+        Err(_) => {
+            false
+        }
     }
 }
 
