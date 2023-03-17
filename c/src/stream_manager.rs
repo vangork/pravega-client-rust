@@ -3,6 +3,7 @@ use crate::stream_writer::StreamWriter;
 use libc::c_char;
 use pravega_client::client_factory::ClientFactory;
 use pravega_client_config::*;
+use pravega_client_config::credentials::Credentials;
 use pravega_client_shared::*;
 use std::ffi::CStr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -21,23 +22,30 @@ impl StreamManager {
 
     fn new(
         controller_uri: &str,
-        auth_enabled: bool,
+        keycloak_file: &str,
         tls_enabled: bool,
         disable_cert_verification: bool,
     ) -> Self {
         let mut builder = ClientConfigBuilder::default();
 
-        builder
+        let (auth_enabled, credential) = {
+            if keycloak_file.is_empty() {
+                (false, Credentials::basic("".into(), "".into()))
+            } else {
+                (true, Credentials::keycloak(keycloak_file, disable_cert_verification))
+            }
+        };
+
+        let config = builder
             .controller_uri(controller_uri)
-            .is_auth_enabled(auth_enabled);
-        if tls_enabled {
-            // would be better to have tls_enabled be &PyAny
-            // and args tls_enabled = None or sentinel e.g. missing=object()
-            builder.is_tls_enabled(tls_enabled);
-            builder.disable_cert_verification(disable_cert_verification);
-        }
-        let config = builder.build().expect("creating config");
-        let client_factory = ClientFactory::new(config.clone());
+            .is_auth_enabled(auth_enabled)      
+            .credentials(credential)
+            .is_tls_enabled(tls_enabled)      
+            .disable_cert_verification(disable_cert_verification)
+            .build()
+            .expect("creating config");
+
+        let client_factory = ClientFactory::new(config);
 
         StreamManager {
             cf: client_factory,
@@ -124,16 +132,22 @@ pub unsafe extern "C" fn create_stream_manager_with_config(
 #[no_mangle]
 pub unsafe extern "C" fn create_stream_manager(
     controller_uri: *const c_char,
-    auth_enabled: bool,
+    keycloak_file: *const c_char,
     tls_enabled: bool,
     disable_cert_verification: bool,
 ) -> *mut StreamManager {
-    let raw = CStr::from_ptr(controller_uri);
-    let controller_uri = raw.to_str().unwrap();
+    let controller_uri = {
+        let cstr = CStr::from_ptr(controller_uri);
+        cstr.to_str().unwrap()
+    };
+    let keycloak_file = {
+        let cstr = CStr::from_ptr(keycloak_file);
+        cstr.to_str().unwrap()
+    };
     match catch_unwind(|| {
         StreamManager::new(
             controller_uri,
-            auth_enabled,
+            keycloak_file,
             tls_enabled,
             disable_cert_verification,
         )
