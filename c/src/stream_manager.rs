@@ -22,29 +22,47 @@ impl StreamManager {
 
     fn new(
         controller_uri: &str,
-        keycloak_file: &str,
+        auth_enabled: bool,
         tls_enabled: bool,
         disable_cert_verification: bool,
     ) -> Self {
         let mut builder = ClientConfigBuilder::default();
 
-        let (auth_enabled, credential) = {
-            if keycloak_file.is_empty() {
-                (false, Credentials::basic("".into(), "".into()))
-            } else {
-                (true, Credentials::keycloak(keycloak_file, disable_cert_verification))
-            }
-        };
+        builder
+            .controller_uri(controller_uri)
+            .is_auth_enabled(auth_enabled);
+        if tls_enabled {
+            // would be better to have tls_enabled be &PyAny
+            // and args tls_enabled = None or sentinel e.g. missing=object()
+            builder.is_tls_enabled(tls_enabled);
+            builder.disable_cert_verification(disable_cert_verification);
+        }
+        let config = builder.build().expect("creating config");
+        let client_factory = ClientFactory::new(config.clone());
 
-        let config = builder
+        StreamManager {
+            cf: client_factory,
+        }
+    }
+    
+    fn new_with_keyclock(
+        controller_uri: &str,
+        keycloak_file: &str,
+        auth_enabled: bool,
+        disable_cert_verification: bool,
+    ) -> Self {
+        let mut builder = ClientConfigBuilder::default();
+        builder
             .controller_uri(controller_uri)
             .is_auth_enabled(auth_enabled)      
-            .credentials(credential)
-            .is_tls_enabled(tls_enabled)      
-            .disable_cert_verification(disable_cert_verification)
-            .build()
-            .expect("creating config");
-
+            .disable_cert_verification(disable_cert_verification);
+        
+        if !keycloak_file.is_empty() {
+            let credentials = Credentials::keycloak(keycloak_file, disable_cert_verification);
+            builder.credentials(credentials);
+        }
+        
+        let config = builder.build().expect("creating config");
         let client_factory = ClientFactory::new(config);
 
         StreamManager {
@@ -132,23 +150,64 @@ pub unsafe extern "C" fn create_stream_manager_with_config(
 #[no_mangle]
 pub unsafe extern "C" fn create_stream_manager(
     controller_uri: *const c_char,
-    keycloak_file: *const c_char,
+    auth_enabled: bool,
     tls_enabled: bool,
     disable_cert_verification: bool,
 ) -> *mut StreamManager {
-    let controller_uri = {
-        let cstr = CStr::from_ptr(controller_uri);
-        cstr.to_str().unwrap()
-    };
-    let keycloak_file = {
-        let cstr = CStr::from_ptr(keycloak_file);
-        cstr.to_str().unwrap()
+    let raw = CStr::from_ptr(controller_uri);
+    let controller_uri = match raw.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return ptr::null_mut();
+        }
     };
     match catch_unwind(|| {
         StreamManager::new(
             controller_uri,
-            keycloak_file,
+            auth_enabled,
             tls_enabled,
+            disable_cert_verification,
+        )
+    }) {
+        Ok(manager) => {
+            Box::into_raw(Box::new(manager))
+        }
+        Err(_) => {
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn create_stream_manager_with_keyclock(
+    controller_uri: *const c_char,
+    keycloak_file: *const c_char,
+    auth_enabled: bool,
+    disable_cert_verification: bool,
+) -> *mut StreamManager {
+    let controller_uri = {
+        let cstr = CStr::from_ptr(controller_uri);
+        match cstr.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                return ptr::null_mut();
+            }
+        }
+    };
+    let keycloak_file = {
+        let cstr = CStr::from_ptr(keycloak_file);
+        match cstr.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                return ptr::null_mut();
+            }
+        }
+    };
+    match catch_unwind(|| {
+        StreamManager::new_with_keyclock(
+            controller_uri,
+            keycloak_file,
+            auth_enabled,
             disable_cert_verification,
         )
     }) {
