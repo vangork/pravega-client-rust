@@ -3,6 +3,7 @@ use crate::stream_writer::StreamWriter;
 use libc::c_char;
 use pravega_client::client_factory::ClientFactory;
 use pravega_client_config::*;
+use pravega_client_config::credentials::Credentials;
 use pravega_client_shared::*;
 use std::ffi::CStr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -38,6 +39,31 @@ impl StreamManager {
         }
         let config = builder.build().expect("creating config");
         let client_factory = ClientFactory::new(config.clone());
+
+        StreamManager {
+            cf: client_factory,
+        }
+    }
+    
+    fn new_with_keyclock(
+        controller_uri: &str,
+        keycloak_file: &str,
+        auth_enabled: bool,
+        disable_cert_verification: bool,
+    ) -> Self {
+        let mut builder = ClientConfigBuilder::default();
+        builder
+            .controller_uri(controller_uri)
+            .is_auth_enabled(auth_enabled)      
+            .disable_cert_verification(disable_cert_verification);
+        
+        if !keycloak_file.is_empty() {
+            let credentials = Credentials::keycloak(keycloak_file, disable_cert_verification);
+            builder.credentials(credentials);
+        }
+        
+        let config = builder.build().expect("creating config");
+        let client_factory = ClientFactory::new(config);
 
         StreamManager {
             cf: client_factory,
@@ -129,12 +155,59 @@ pub unsafe extern "C" fn create_stream_manager(
     disable_cert_verification: bool,
 ) -> *mut StreamManager {
     let raw = CStr::from_ptr(controller_uri);
-    let controller_uri = raw.to_str().unwrap();
+    let controller_uri = match raw.to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return ptr::null_mut();
+        }
+    };
     match catch_unwind(|| {
         StreamManager::new(
             controller_uri,
             auth_enabled,
             tls_enabled,
+            disable_cert_verification,
+        )
+    }) {
+        Ok(manager) => {
+            Box::into_raw(Box::new(manager))
+        }
+        Err(_) => {
+            ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn create_stream_manager_with_keyclock(
+    controller_uri: *const c_char,
+    keycloak_file: *const c_char,
+    auth_enabled: bool,
+    disable_cert_verification: bool,
+) -> *mut StreamManager {
+    let controller_uri = {
+        let cstr = CStr::from_ptr(controller_uri);
+        match cstr.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                return ptr::null_mut();
+            }
+        }
+    };
+    let keycloak_file = {
+        let cstr = CStr::from_ptr(keycloak_file);
+        match cstr.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                return ptr::null_mut();
+            }
+        }
+    };
+    match catch_unwind(|| {
+        StreamManager::new_with_keyclock(
+            controller_uri,
+            keycloak_file,
+            auth_enabled,
             disable_cert_verification,
         )
     }) {
