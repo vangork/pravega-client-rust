@@ -1,4 +1,3 @@
-use crate::config::*;
 use crate::stream_writer::StreamWriter;
 use libc::c_char;
 use pravega_client::client_factory::ClientFactory;
@@ -14,54 +13,24 @@ pub struct StreamManager {
 }
 
 impl StreamManager {
-    fn new_with_config(client_config: ClientConfig) -> Self {
-        let client_factory = ClientFactory::new(client_config);
-
-        StreamManager { cf: client_factory }
-    }
-
     fn new(
-        controller_uri: &str,
-        auth_enabled: bool,
-        tls_enabled: bool,
-        disable_cert_verification: bool,
-    ) -> Self {
-        let mut builder = ClientConfigBuilder::default();
-
-        builder
-            .controller_uri(controller_uri)
-            .is_auth_enabled(auth_enabled);
-        if tls_enabled {
-            // would be better to have tls_enabled be &PyAny
-            // and args tls_enabled = None or sentinel e.g. missing=object()
-            builder.is_tls_enabled(tls_enabled);
-            builder.disable_cert_verification(disable_cert_verification);
-        }
-        let config = builder.build().expect("creating config");
-        let client_factory = ClientFactory::new(config.clone());
-
-        StreamManager {
-            cf: client_factory,
-        }
-    }
-    
-    fn new_with_keyclock(
         controller_uri: &str,
         keycloak_file: &str,
         auth_enabled: bool,
         disable_cert_verification: bool,
     ) -> Self {
         let mut builder = ClientConfigBuilder::default();
-        builder
-            .controller_uri(controller_uri)
-            .is_auth_enabled(auth_enabled)      
-            .disable_cert_verification(disable_cert_verification);
-        
-        if !keycloak_file.is_empty() {
+        builder.controller_uri(controller_uri.to_string());
+            
+        if keycloak_file.is_empty() {
+            builder.is_auth_enabled(auth_enabled)
+                .disable_cert_verification(disable_cert_verification);
+        } else {
             let credentials = Credentials::keycloak(keycloak_file, disable_cert_verification);
-            builder.credentials(credentials);
+            builder.is_auth_enabled(true)
+                .credentials(credentials);
         }
-        
+            
         let config = builder.build().expect("creating config");
         let client_factory = ClientFactory::new(config);
 
@@ -131,27 +100,9 @@ impl StreamManager {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn create_stream_manager_with_config(
-    client_config: ClientConfigMapping,
-) -> *mut StreamManager {
-    match catch_unwind(|| {
-        let config = client_config.to_client_config();
-        StreamManager::new_with_config(config)
-    }) {
-        Ok(manager) => {
-            Box::into_raw(Box::new(manager))
-        }
-        Err(_) => {
-            ptr::null_mut()
-        }
-    }
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn create_stream_manager(
     controller_uri: *const c_char,
     auth_enabled: bool,
-    tls_enabled: bool,
     disable_cert_verification: bool,
 ) -> *mut StreamManager {
     let raw = CStr::from_ptr(controller_uri);
@@ -164,8 +115,8 @@ pub unsafe extern "C" fn create_stream_manager(
     match catch_unwind(|| {
         StreamManager::new(
             controller_uri,
+            "",
             auth_enabled,
-            tls_enabled,
             disable_cert_verification,
         )
     }) {
@@ -204,7 +155,7 @@ pub unsafe extern "C" fn create_stream_manager_with_keyclock(
         }
     };
     match catch_unwind(|| {
-        StreamManager::new_with_keyclock(
+        StreamManager::new(
             controller_uri,
             keycloak_file,
             auth_enabled,
@@ -244,28 +195,6 @@ pub unsafe extern "C" fn stream_manager_create_scope(
 
     let stream_manager = &*manager;
     match catch_unwind(AssertUnwindSafe(move || stream_manager.create_scope(scope_name))) {
-        Ok(result) => match result {
-            Ok(val) => val,
-            Err(_) => {
-                false
-            }
-        },
-        Err(_) => {
-            false
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn stream_manager_create_stream_with_config(
-    manager: *const StreamManager,
-    stream_config: StreamConfigurationMapping,
-) -> bool {
-    let stream_manager = &*manager;
-    match catch_unwind(AssertUnwindSafe(move || {
-        let stream_cfg = stream_config.to_stream_configuration();
-        stream_manager.create_stream_with_config(stream_cfg)
-    })) {
         Ok(result) => match result {
             Ok(val) => val,
             Err(_) => {

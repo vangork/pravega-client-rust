@@ -1,5 +1,3 @@
-mod config;
-
 mod stream_manager;
 pub use stream_manager::StreamManager;
 

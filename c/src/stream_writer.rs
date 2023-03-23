@@ -22,7 +22,7 @@ pub struct StreamWriter {
 }
 
 impl StreamWriter {
-    pub fn new(writer: EventWriter, runtime_handle: Handle, stream: ScopedStream, max_inflight_count: usize,) -> Self {
+    pub fn new(writer: EventWriter, runtime_handle: Handle, stream: ScopedStream, max_inflight_count: usize) -> Self {
         StreamWriter {
             writer,
             runtime_handle,
@@ -133,7 +133,7 @@ pub unsafe extern "C" fn stream_writer_flush(writer: *mut StreamWriter) -> bool 
 
     match catch_unwind(AssertUnwindSafe(move || stream_writer.flush())) {
         Ok(result) => {
-            if let Ok(val) = result {
+            if let Ok(_) = result {
                 true
             } else {
                 false
