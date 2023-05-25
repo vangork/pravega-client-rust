@@ -130,7 +130,7 @@ pub unsafe extern "C" fn create_stream_manager(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn create_stream_manager_with_keyclock(
+pub unsafe extern "C" fn create_stream_manager_with_keycloak(
     controller_uri: *const c_char,
     keycloak_file: *const c_char,
     auth_enabled: bool,
