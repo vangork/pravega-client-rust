@@ -9,14 +9,14 @@ with strict ordering and consistency.
 ## Build
 ```
 # build dynamic library & generate header
-cd cc
+cd c
 cargo build --release
 ```
 
 ## How to use pravega c client
 
 1. build rust dynamic library
-cd golang
+cd c
 cargo build --release
 cd .. # cd to rust project root directory
 mv ./target/release/libpravega_client_c.so /usr/lib
